@@ -1,0 +1,411 @@
+From 96399ce357204386b2f478c768ce38f7b9ccf795 Mon Sep 17 00:00:00 2001
+From: Rajaniraiyn R <rajaniraiyn@gmail.com>
+Date: Wed, 28 Jan 2026 06:22:09 +0530
+Subject: [PATCH] patch: remove-default-gateway-provider
+
+---
+ packages/ai/package.json                      |  1 -
+ .../ai/src/error/no-global-provider-error.ts  | 19 +++++++++
+ .../ai/src/generate-object/generate-object.ts |  3 +-
+ .../ai/src/generate-object/stream-object.ts   |  3 +-
+ .../ai/src/generate-text/generate-text.ts     |  3 +-
+ packages/ai/src/generate-text/stream-text.ts  |  3 +-
+ packages/ai/src/global.ts                     |  2 -
+ packages/ai/src/index.ts                      |  1 -
+ packages/ai/src/model/resolve-model.test.ts   | 42 -------------------
+ packages/ai/src/model/resolve-model.ts        | 30 +++++++++----
+ packages/ai/src/prompt/wrap-gateway-error.ts  | 29 -------------
+ packages/ai/src/types/language-model.ts       |  5 +--
+ packages/ai/tsconfig.json                     |  3 --
+ pnpm-lock.yaml                                |  3 --
+ 14 files changed, 47 insertions(+), 100 deletions(-)
+ create mode 100644 packages/ai/src/error/no-global-provider-error.ts
+ delete mode 100644 packages/ai/src/prompt/wrap-gateway-error.ts
+
+diff --git a/packages/ai/package.json b/packages/ai/package.json
+index ebfe53a..ee83568 100644
+--- a/packages/ai/package.json
++++ b/packages/ai/package.json
+@@ -60,7 +60,6 @@
+     }
+   },
+   "dependencies": {
+-    "@ai-sdk/gateway": "workspace:*",
+     "@ai-sdk/provider": "workspace:*",
+     "@ai-sdk/provider-utils": "workspace:*",
+     "@opentelemetry/api": "1.9.0"
+diff --git a/packages/ai/src/error/no-global-provider-error.ts b/packages/ai/src/error/no-global-provider-error.ts
+new file mode 100644
+index 0000000..4503b6f
+--- /dev/null
++++ b/packages/ai/src/error/no-global-provider-error.ts
+@@ -0,0 +1,19 @@
++import { AISDKError } from '@ai-sdk/provider';
++
++const name = 'AI_NoGlobalProvider';
++const marker = `vercel.ai.error.${name}`;
++const symbol = Symbol.for(marker);
++
++export class NoGlobalProviderError extends AISDKError {
++  private readonly [symbol] = true; // used in isInstance
++
++  constructor({
++    message = 'No Global Provider found',
++  }: { message?: string } = {}) {
++    super({ name, message });
++  }
++
++  static isInstance(error: unknown): error is NoGlobalProviderError {
++    return AISDKError.hasMarker(error, marker);
++  }
++}
+diff --git a/packages/ai/src/generate-object/generate-object.ts b/packages/ai/src/generate-object/generate-object.ts
+index 7986ffa..29b6233 100644
+--- a/packages/ai/src/generate-object/generate-object.ts
++++ b/packages/ai/src/generate-object/generate-object.ts
+@@ -16,7 +16,6 @@ import { convertToLanguageModelPrompt } from '../prompt/convert-to-language-mode
+ import { prepareCallSettings } from '../prompt/prepare-call-settings';
+ import { Prompt } from '../prompt/prompt';
+ import { standardizePrompt } from '../prompt/standardize-prompt';
+-import { wrapGatewayError } from '../prompt/wrap-gateway-error';
+ import { assembleOperationName } from '../telemetry/assemble-operation-name';
+ import { getBaseTelemetryAttributes } from '../telemetry/get-base-telemetry-attributes';
+ import { getTracer } from '../telemetry/get-tracer';
+@@ -472,7 +471,7 @@ export async function generateObject<
+       },
+     });
+   } catch (error) {
+-    throw wrapGatewayError(error);
++    throw error;
+   }
+ }
+ 
+diff --git a/packages/ai/src/generate-object/stream-object.ts b/packages/ai/src/generate-object/stream-object.ts
+index 15788bd..e80b603 100644
+--- a/packages/ai/src/generate-object/stream-object.ts
++++ b/packages/ai/src/generate-object/stream-object.ts
+@@ -21,7 +21,6 @@ import { convertToLanguageModelPrompt } from '../prompt/convert-to-language-mode
+ import { prepareCallSettings } from '../prompt/prepare-call-settings';
+ import { Prompt } from '../prompt/prompt';
+ import { standardizePrompt } from '../prompt/standardize-prompt';
+-import { wrapGatewayError } from '../prompt/wrap-gateway-error';
+ import { assembleOperationName } from '../telemetry/assemble-operation-name';
+ import { getBaseTelemetryAttributes } from '../telemetry/get-base-telemetry-attributes';
+ import { getTracer } from '../telemetry/get-tracer';
+@@ -449,7 +448,7 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
+         controller.enqueue(chunk);
+ 
+         if (chunk.type === 'error') {
+-          onError({ error: wrapGatewayError(chunk.error) });
++          onError({ error: chunk.error });
+         }
+       },
+     });
+diff --git a/packages/ai/src/generate-text/generate-text.ts b/packages/ai/src/generate-text/generate-text.ts
+index f05df9a..c22eba7 100644
+--- a/packages/ai/src/generate-text/generate-text.ts
++++ b/packages/ai/src/generate-text/generate-text.ts
+@@ -27,7 +27,6 @@ import { prepareCallSettings } from '../prompt/prepare-call-settings';
+ import { prepareToolsAndToolChoice } from '../prompt/prepare-tools-and-tool-choice';
+ import { Prompt } from '../prompt/prompt';
+ import { standardizePrompt } from '../prompt/standardize-prompt';
+-import { wrapGatewayError } from '../prompt/wrap-gateway-error';
+ import { ToolCallNotFoundForApprovalError } from '../error/tool-call-not-found-for-approval-error';
+ import { assembleOperationName } from '../telemetry/assemble-operation-name';
+ import { getBaseTelemetryAttributes } from '../telemetry/get-base-telemetry-attributes';
+@@ -921,7 +920,7 @@ export async function generateText<
+       },
+     });
+   } catch (error) {
+-    throw wrapGatewayError(error);
++    throw error;
+   }
+ }
+ 
+diff --git a/packages/ai/src/generate-text/stream-text.ts b/packages/ai/src/generate-text/stream-text.ts
+index 446a66c..da5837c 100644
+--- a/packages/ai/src/generate-text/stream-text.ts
++++ b/packages/ai/src/generate-text/stream-text.ts
+@@ -30,7 +30,6 @@ import { prepareCallSettings } from '../prompt/prepare-call-settings';
+ import { prepareToolsAndToolChoice } from '../prompt/prepare-tools-and-tool-choice';
+ import { Prompt } from '../prompt/prompt';
+ import { standardizePrompt } from '../prompt/standardize-prompt';
+-import { wrapGatewayError } from '../prompt/wrap-gateway-error';
+ import { assembleOperationName } from '../telemetry/assemble-operation-name';
+ import { getBaseTelemetryAttributes } from '../telemetry/get-base-telemetry-attributes';
+ import { getTracer } from '../telemetry/get-tracer';
+@@ -754,7 +753,7 @@ class DefaultStreamTextResult<TOOLS extends ToolSet, OUTPUT extends Output>
+         }
+ 
+         if (part.type === 'error') {
+-          await onError({ error: wrapGatewayError(part.error) });
++          await onError({ error: part.error });
+         }
+ 
+         if (part.type === 'text-start') {
+diff --git a/packages/ai/src/global.ts b/packages/ai/src/global.ts
+index 72557a9..3d21325 100644
+--- a/packages/ai/src/global.ts
++++ b/packages/ai/src/global.ts
+@@ -7,8 +7,6 @@ declare global {
+    * The default provider to use for the AI SDK.
+    * String model ids are resolved to the default provider and model id.
+    *
+-   * If not set, the default provider is the Vercel AI gateway provider.
+-   *
+    * @see https://ai-sdk.dev/docs/ai-sdk-core/provider-management#global-provider-configuration
+    */
+   var AI_SDK_DEFAULT_PROVIDER: ProviderV3 | undefined;
+diff --git a/packages/ai/src/index.ts b/packages/ai/src/index.ts
+index 06af1fe..7eb52b7 100644
+--- a/packages/ai/src/index.ts
++++ b/packages/ai/src/index.ts
+@@ -1,5 +1,4 @@
+ // re-exports:
+-export { createGateway, gateway, type GatewayModelId } from '@ai-sdk/gateway';
+ export {
+   asSchema,
+   createIdGenerator,
+diff --git a/packages/ai/src/model/resolve-model.test.ts b/packages/ai/src/model/resolve-model.test.ts
+index a112459..5b901ba 100644
+--- a/packages/ai/src/model/resolve-model.test.ts
++++ b/packages/ai/src/model/resolve-model.test.ts
+@@ -1,4 +1,3 @@
+-import { gateway } from '@ai-sdk/gateway';
+ import { EmbeddingModelV2, LanguageModelV2 } from '@ai-sdk/provider';
+ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+ 
+@@ -68,15 +67,6 @@ describe('resolveLanguageModel', () => {
+     });
+   });
+ 
+-  describe('when a string is provided and the global default provider is not set', () => {
+-    it('should return a gateway language model', () => {
+-      const resolvedModel = resolveLanguageModel('test-model-id');
+-
+-      expect(resolvedModel.provider).toBe('gateway');
+-      expect(resolvedModel.modelId).toBe('test-model-id');
+-    });
+-  });
+-
+   describe('when a string is provided and the global default provider is set', () => {
+     beforeEach(() => {
+       globalThis.AI_SDK_DEFAULT_PROVIDER = customProvider({
+@@ -144,15 +134,6 @@ describe('resolveEmbeddingModel', () => {
+     });
+   });
+ 
+-  describe('when a string is provided and the global default provider is not set', () => {
+-    it('should return a gateway embedding model', () => {
+-      const resolvedModel = resolveEmbeddingModel('test-model-id');
+-
+-      expect(resolvedModel.provider).toBe('gateway');
+-      expect(resolvedModel.modelId).toBe('test-model-id');
+-    });
+-  });
+-
+   describe('when a string is provided and the global default provider is set', () => {
+     beforeEach(() => {
+       globalThis.AI_SDK_DEFAULT_PROVIDER = customProvider({
+@@ -193,29 +174,6 @@ describe('resolveImageModel', () => {
+     });
+   });
+ 
+-  describe('when a string is provided and the global default provider is not set', () => {
+-    it('should return a gateway image model', () => {
+-      const resolvedModel = resolveImageModel(
+-        new MockImageModelV2({
+-          provider: 'gateway',
+-          modelId: 'test-model-id',
+-        }),
+-      );
+-
+-      const imageModelSpy = vi
+-        .spyOn(gateway, 'imageModel')
+-        .mockReturnValue(resolvedModel);
+-
+-      try {
+-        const resolvedModel = resolveImageModel('test-model-id');
+-
+-        expect(resolvedModel).toBe(resolvedModel);
+-      } finally {
+-        imageModelSpy.mockRestore();
+-      }
+-    });
+-  });
+-
+   describe('when a string is provided and the global default provider is set', () => {
+     beforeEach(() => {
+       globalThis.AI_SDK_DEFAULT_PROVIDER = customProvider({
+diff --git a/packages/ai/src/model/resolve-model.ts b/packages/ai/src/model/resolve-model.ts
+index e14f70e..6eb03a4 100644
+--- a/packages/ai/src/model/resolve-model.ts
++++ b/packages/ai/src/model/resolve-model.ts
+@@ -1,4 +1,3 @@
+-import { gateway } from '@ai-sdk/gateway';
+ import {
+   EmbeddingModelV3,
+   ImageModelV3,
+@@ -18,6 +17,7 @@ import { asLanguageModelV3 } from './as-language-model-v3';
+ import { asSpeechModelV3 } from './as-speech-model-v3';
+ import { asTranscriptionModelV3 } from './as-transcription-model-v3';
+ import { ImageModel } from '../types/image-model';
++import { NoGlobalProviderError } from '../error/no-global-provider-error';
+ 
+ export function resolveLanguageModel(model: LanguageModel): LanguageModelV3 {
+   if (typeof model !== 'string') {
+@@ -36,7 +36,10 @@ export function resolveLanguageModel(model: LanguageModel): LanguageModelV3 {
+     return asLanguageModelV3(model);
+   }
+ 
+-  return getGlobalProvider().languageModel(model);
++  const globalProvider = getGlobalProvider();
++  if (!globalProvider) throw new NoGlobalProviderError();
++
++  return globalProvider.languageModel(model);
+ }
+ 
+ export function resolveEmbeddingModel(model: EmbeddingModel): EmbeddingModelV3 {
+@@ -56,7 +59,10 @@ export function resolveEmbeddingModel(model: EmbeddingModel): EmbeddingModelV3 {
+     return asEmbeddingModelV3(model);
+   }
+ 
+-  return getGlobalProvider().embeddingModel(model);
++  const globalProvider = getGlobalProvider();
++  if (!globalProvider) throw new NoGlobalProviderError();
++
++  return globalProvider.embeddingModel(model);
+ }
+ 
+ export function resolveTranscriptionModel(
+@@ -76,8 +82,10 @@ export function resolveTranscriptionModel(
+     }
+     return asTranscriptionModelV3(model);
+   }
++  const globalProvider = getGlobalProvider();
++  if (!globalProvider) throw new NoGlobalProviderError();
+ 
+-  return getGlobalProvider().transcriptionModel?.(model);
++  return globalProvider.transcriptionModel?.(model);
+ }
+ 
+ export function resolveSpeechModel(
+@@ -98,7 +106,10 @@ export function resolveSpeechModel(
+     return asSpeechModelV3(model);
+   }
+ 
+-  return getGlobalProvider().speechModel?.(model);
++  const globalProvider = getGlobalProvider();
++  if (!globalProvider) throw new NoGlobalProviderError();
++
++  return globalProvider.speechModel?.(model);
+ }
+ 
+ export function resolveImageModel(model: ImageModel): ImageModelV3 {
+@@ -118,9 +129,12 @@ export function resolveImageModel(model: ImageModel): ImageModelV3 {
+     return asImageModelV3(model);
+   }
+ 
+-  return getGlobalProvider().imageModel(model);
++  const globalProvider = getGlobalProvider();
++  if (!globalProvider) throw new NoGlobalProviderError();
++
++  return globalProvider.imageModel(model);
+ }
+ 
+-function getGlobalProvider(): ProviderV3 {
+-  return globalThis.AI_SDK_DEFAULT_PROVIDER ?? gateway;
++function getGlobalProvider(): ProviderV3 | undefined {
++  return globalThis.AI_SDK_DEFAULT_PROVIDER;
+ }
+diff --git a/packages/ai/src/prompt/wrap-gateway-error.ts b/packages/ai/src/prompt/wrap-gateway-error.ts
+deleted file mode 100644
+index 19fa3ca..0000000
+--- a/packages/ai/src/prompt/wrap-gateway-error.ts
++++ /dev/null
+@@ -1,29 +0,0 @@
+-import { GatewayAuthenticationError } from '@ai-sdk/gateway';
+-import { AISDKError } from '@ai-sdk/provider';
+-
+-export function wrapGatewayError(error: unknown): unknown {
+-  if (!GatewayAuthenticationError.isInstance(error)) return error;
+-
+-  const isProductionEnv = process?.env.NODE_ENV === 'production';
+-  const moreInfoURL = 'https://ai-sdk.dev/unauthenticated-ai-gateway';
+-
+-  if (isProductionEnv) {
+-    return new AISDKError({
+-      name: 'GatewayError',
+-      message: `Unauthenticated. Configure AI_GATEWAY_API_KEY or use a provider module. Learn more: ${moreInfoURL}`,
+-    });
+-  }
+-
+-  return Object.assign(
+-    new Error(`\u001b[1m\u001b[31mUnauthenticated request to AI Gateway.\u001b[0m
+-
+-To authenticate, set the \u001b[33mAI_GATEWAY_API_KEY\u001b[0m environment variable with your API key.
+-
+-Alternatively, you can use a provider module instead of the AI Gateway.
+-
+-Learn more: \u001b[34m${moreInfoURL}\u001b[0m
+-
+-`),
+-    { name: 'GatewayAuthenticationError' },
+-  );
+-}
+diff --git a/packages/ai/src/types/language-model.ts b/packages/ai/src/types/language-model.ts
+index e12fd98..9e18fc9 100644
+--- a/packages/ai/src/types/language-model.ts
++++ b/packages/ai/src/types/language-model.ts
+@@ -1,4 +1,3 @@
+-import { GatewayModelId } from '@ai-sdk/gateway';
+ import {
+   LanguageModelV2,
+   LanguageModelV3,
+@@ -40,13 +39,13 @@ declare global {
+ }
+ 
+ /**
+- * Global provider model ID type that defaults to GatewayModelId but can be augmented
++ * Global provider model ID type that defaults to provider set via AI_SDK_DEFAULT_PROVIDER but can be augmented
+  * by third-party packages via declaration merging.
+  */
+ export type GlobalProviderModelId = [keyof RegisteredProviderModels] extends [
+   never,
+ ]
+-  ? GatewayModelId
++  ? string
+   :
+       | keyof RegisteredProviderModels
+       | RegisteredProviderModels[keyof RegisteredProviderModels];
+diff --git a/packages/ai/tsconfig.json b/packages/ai/tsconfig.json
+index fcf8894..8de92ca 100644
+--- a/packages/ai/tsconfig.json
++++ b/packages/ai/tsconfig.json
+@@ -24,9 +24,6 @@
+     {
+       "path": "../provider-utils"
+     },
+-    {
+-      "path": "../gateway"
+-    },
+     {
+       "path": "../test-server"
+     }
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index f314c36..d50b6f5 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -1416,9 +1416,6 @@ importers:
+ 
+   packages/ai:
+     dependencies:
+-      '@ai-sdk/gateway':
+-        specifier: workspace:*
+-        version: link:../gateway
+       '@ai-sdk/provider':
+         specifier: workspace:*
+         version: link:../provider
+-- 
+2.50.1 (Apple Git-155)
+

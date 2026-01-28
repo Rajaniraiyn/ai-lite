@@ -1,0 +1,28 @@
+{
+  "name": "ai-lite",
+  "private": true,
+  "type": "module",
+  "config": {
+    "repo": "https://github.com/vercel/ai.git",
+    "commit": "a6486cd9def5ae23f179bcb5795803206b280f48",
+    "dir": "ai",
+    "patchesDir": "patches",
+    "branch": "main",
+    "buildCommand": "pnpm run build:packages"
+  },
+  "scripts": {
+    "ai.clone": "node --experimental-strip-types scripts/clone.ts",
+    "ai.reset": "node --experimental-strip-types scripts/reset.ts",
+    "ai.apply-patches": "node --experimental-strip-types scripts/apply-patches.ts",
+    "patch.start": "node --experimental-strip-types scripts/patch-start.ts",
+    "patch.finish": "node --experimental-strip-types scripts/patch-finish.ts",
+    "patch.update": "node --experimental-strip-types scripts/patch-update.ts",
+    "patch.update-finish": "node --experimental-strip-types scripts/patch-update-finish.ts",
+    "patch.rebase": "node --experimental-strip-types scripts/patch-rebase.ts",
+    "ai.build": "node --experimental-strip-types scripts/build.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "typescript": "^5.9.3"
+  }
+}

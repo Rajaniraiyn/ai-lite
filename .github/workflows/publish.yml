@@ -1,0 +1,51 @@
+name: Build and publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildCommand:
+        description: "Build command to run inside the ai repo (overrides config.buildCommand)"
+        required: false
+        default: ""
+      publishCommand:
+        description: "Publish command to run inside the ai repo"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Clone and apply patches
+        run: |
+          bun run ai:clone
+          bun run ai:reset
+          bun run ai:apply-patches
+
+      - name: Build
+        if: inputs.buildCommand != ''
+        run: bun run ai:build --cmd "${{ inputs.buildCommand }}"
+
+      - name: Build (config.buildCommand)
+        if: inputs.buildCommand == ''
+        run: bun run ai:build
+
+      - name: Publish
+        run: |
+          cd ai
+          ${{ inputs.publishCommand }}

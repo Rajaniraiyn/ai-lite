@@ -1,0 +1,72 @@
+name: Cron update
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # Daily at 03:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute latest commit
+        id: latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO=$(node -p "require('./package.json').config.repo")
+          CURRENT=$(node -p "require('./package.json').config.commit")
+          NEXT=$(git ls-remote "$REPO" HEAD | awk '{print $1}')
+
+          if [[ -z "$NEXT" ]]; then
+            echo "Failed to resolve upstream HEAD."
+            exit 1
+          fi
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Stop if no changes
+        if: steps.latest.outputs.current == steps.latest.outputs.next
+        run: echo "No upstream changes."
+
+      - name: Update package.json
+        if: steps.latest.outputs.current != steps.latest.outputs.next
+        run: |
+          node -e "const fs=require('fs');const pkg=require('./package.json');pkg.config.commit='${{ steps.latest.outputs.next }}';fs.writeFileSync('./package.json',JSON.stringify(pkg,null,2)+'\n');"
+
+      - name: Close existing cron-update PRs
+        if: steps.latest.outputs.current != steps.latest.outputs.next
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prs=$(gh pr list --state open --label cron-update --json number --jq '.[].number')
+          for pr in $prs; do
+            gh pr close "$pr" --delete-branch
+          done
+
+      - name: Create PR
+        if: steps.latest.outputs.current != steps.latest.outputs.next
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="cron-update/${{ steps.latest.outputs.next }}"
+          git checkout -b "$BRANCH"
+          git add package.json
+          git commit -m "chore: bump upstream commit to ${{ steps.latest.outputs.next }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: bump upstream commit" \
+            --body "Automated update to upstream commit ${{ steps.latest.outputs.next }}" \
+            --label "cron-update" \
+            --base main \
+            --head "$BRANCH"
