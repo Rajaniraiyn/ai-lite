@@ -11,6 +11,7 @@ The upstream SDK bundles a default gateway provider. This fork keeps the SDK beh
 - Remove the gateway provider as the default.
 - Require explicit provider configuration when using `generateText` and related APIs.
 - Reduce bundle size by dropping zod/v3 imports in favor of zod/v4
+- Roughly ~100 KB smaller than upstream in our current build (varies by target/bundler).
 
 ## How it works
 
