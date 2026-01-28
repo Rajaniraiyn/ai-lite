@@ -33,17 +33,17 @@ jobs:
 
       - name: Clone and apply patches
         run: |
-          bun run ai:clone
-          bun run ai:reset
-          bun run ai:apply-patches
+          bun run ai.clone
+          bun run ai.reset
+          bun run ai.apply-patches
 
       - name: Build
         if: inputs.buildCommand != ''
-        run: bun run ai:build --cmd "${{ inputs.buildCommand }}"
+        run: bun run ai.build --cmd "${{ inputs.buildCommand }}"
 
       - name: Build (config.buildCommand)
         if: inputs.buildCommand == ''
-        run: bun run ai:build
+        run: bun run ai.build
 
       - name: Publish
         run: |

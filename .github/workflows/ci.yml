@@ -21,9 +21,9 @@ jobs:
 
       - name: Clone and apply patches
         run: |
-          bun run ai:clone
-          bun run ai:reset
-          bun run ai:apply-patches
+          bun run ai.clone
+          bun run ai.reset
+          bun run ai.apply-patches
 
       - name: Build
         run: bun run ai:build
